@@ -1,0 +1,330 @@
+---
+title: "Untitled"
+output:
+  pdf_document: default
+  html_document: default
+date: "2023-07-28"
+---
+# DANA 4840 - FINAL (Programming)
+## Student Name: Lovella Inso
+## Student ID: 100392634
+
+### Reading the Data
+```{r}
+df <- read.csv('seeds.csv')
+```
+
+### 1.	Perform exploratory analysis of the dataset – be as thorough as you can given the time allotted. Check for missing values/data by writing R code and producing suitable output and NOT by looking at data using your eyes.  How do you check if the variables are correlated?  
+
+### Exploratory Data Analysis
+```{r}
+str(df)
+```
+```{r}
+summary(df)
+```
+```{r}
+# checking for missing values
+colSums(is.na(df))
+```
+```{r}
+# getting the numeric columns only
+num_df <- df[, 1:7]
+```
+
+### The data shows no missing values, so we can now proceed with correlation
+```{r}
+corrmat <- round(cor(num_df),2)
+head(corrmat)
+```
+```{r}
+library(reshape2)
+melted_corrmat <- melt(corrmat)
+head(melted_corrmat)
+```
+```{r}
+library(ggplot2)
+ggplot(data = melted_corrmat, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() +
+geom_tile() +
+geom_text(aes(Var2, Var1, label = value),
+          color = "White", size = 4)
+```
+### The correlation heatmap above shows that there are variable that are highly correlated with each other,
+### like V1 and V2 which has positively high correlation wih 99%, closely with V2 and V4 that has 97%, same with V5 and V1. The darker colors shows less correlation like V6 and V7 with only -1% correlation coefficient, followed by V6 and V4 with -17% 
+
+
+
+### 2.	For each of the seven variables, determine if there are any differences among the 3 types/varieties.  You are to interpret what this question means on your own and how best to answer this question.   The more complete your answer, the higher your marks.  Suitable plots should accompany your answer. 
+
+```{r}
+table(df$Type)
+```
+
+
+```{r}
+library(ggplot2)
+
+ggplot(df, aes(x = V1, y = V2, color = Type)) + geom_point()
+
+```
+### The plot above shows that the Type C has the lowest values among the 3 Types, while Type A are in the middle of the graph and Type B has the highest values among the 3 Types
+### lets take a look at the aggregate values below and compare them.
+```{r}
+aggregate(. ~ Type, data = df, FUN = mean)
+```
+### Our Dataset is well balanced, meaning all 3 types have the same number of observations.
+
+### From the aggregate above, Interpretation:
+
+#### The mean value of V1 is highest for Type B (18.33429), followed by Type A (14.33443) and then Type C (11.87386).
+#### The mean value of V2 is highest for Type B (16.13571), followed by Type A (14.29429) and then Type C (13.24786).
+#### The mean value of V3 is highest for Type B (0.8835171), followed by Type A (0.8800700) and then Type C (0.8494086).
+#### The mean value of V4 is highest for Type B (6.148029), followed by Type A (5.508057) and then Type C (5.229514).
+#### The mean value of V5 is highest for Type B (3.677414), followed by Type A (3.244629) and then Type C (2.853771).
+#### The mean value of V6 is highest for Type B (3.644800), followed by Type A (2.667403) and then Type C (4.788400).
+####  The mean value of V7 is highest for Type B (6.020600), followed by Type A (5.087214) and then Type C (5.116400).
+
+### General Observation:
+
+### Overall, Type B tends to have higher mean values for most variables compared to Types A and C.
+### Type C tends to have relatively lower mean values for most variables compared to Types A and B.
+
+
+```{r}
+# Exploring Distribution of data on each Variables through boxplot
+boxplot(num_df)
+```
+### The boxplot above shows that the values of each variable (V1 to V7) are not in the same range. So we need to do scaling to our dataset before performing any clustering. Also the distribution of values of V1 is wide enough while it also has the highest values compared to the other variables. On the other hand, V3 variable is densed or closely packed without any outliers. For V6 variable, it is normally distributed having its median in the middle, but there are visible upper outliers. Among all 7 variables, only V6 has outliers. Most of these variables are right-skewed like V1, V2, V3, V7. While V5 is somehow normally distributed.
+
+
+
+# 3.	Run K-means with 3 clusters on the dataset including graphically representing the clusters. (Reason for choosing k = 3 is because there are 3 varieties).   Give reasons whether you should or should not scale the data before running K-means. 
+
+
+```{r}
+library(cluster)
+library(factoextra)
+```
+
+### We need to scale our dataset here because the values in each column is not ideally similar, there are some values that higher compared to other columns. We could see above in the summary that the mean values are not closer values like V3 which has lower values compared to V1 and V2.
+
+
+```{r}
+scaled_df <- scale(num_df)
+```
+
+### Performing Kmeans with 3 as the value of K
+```{r}
+set.seed(123)
+km.res <- kmeans(scaled_df, 3, nstart = 25)
+```
+
+```{r}
+print(km.res$cluster)
+```
+
+```{r}
+fviz_cluster(km.res, data = scaled_df,
+             palette = "Set2",
+             geom = "point",
+             ellipse.type = "convex", 
+             ggtheme = theme_bw(),
+             title = "Cluster Visualization of the Seeds Dataset using K means"
+            )
+```
+### The cluster graph also shows that the data are properly clustered using K-value = 3.
+
+
+### 4. Perform a test of clustering tendency using the Hopkins statistic and interpret your results. Explain what a score of 0.5 of the Hopkins statistic means.
+```{r}
+library(hopkins)
+# Compute Hopkins statistic for seeds dataset
+res <- hopkins(scaled_df, m = nrow(scaled_df)-1)
+res
+```
+### The result shows that the value of H = 0.9998155 which means to say that the clustering is really good enough. This proves that the 3 Types are clearly the clusters in the dataset.Thus, with the high value of the calculated Hopkin's Statics we conclude the seeds dataset is significantly a clusterable data.
+### The value 0.5 in the Hopkins Statistics means that clustering is random, which means to say that the dataset exposed no clustering structure.
+
+
+
+### 5.	Use as many approaches as you know to identify the ideal number of clusters for this dataset when using K-means. Accompany your answer with suitable plots. Your approaches should include internal validation metrics.   Which number of clusters is appropriate based on the Dunn’s index?
+
+```{r}
+# Elbow Method
+fviz_nbclust(scaled_df, kmeans, method = "wss") +
+    geom_vline(xintercept = 3, linetype = 2 , color = "red")+
+  labs(subtitle = "Elbow method")
+```
+
+```{r}
+# Silhouette Method
+fviz_nbclust(scaled_df, kmeans, method = "silhouette")+
+  labs(subtitle = "Silhouette method")
+
+```
+
+```{r}
+# Gap Statistics
+fviz_nbclust(scaled_df, kmeans, nstart = 25,  method = "gap_stat", nboot = 50)+
+  labs(subtitle = "Gap statistic method")
+```
+### Both Elbow and Gap Statistics gave K value of 3 which means that we can rely on the result given cluster value is 3 for our dataset. While on the other hand, the Silhouette gave 2 cluster value,
+
+
+```{r}
+library(clValid)
+clmethods <- c("hierarchical","kmeans","pam")
+```
+
+```{r}
+# Internal Validation 
+internval <- clValid(scaled_df, nClust = 2:5, clMethods = clmethods, validation = "internal")
+```
+
+```{r}
+summary(internval)
+```
+
+```{r}
+optimalScores(internval)
+```
+
+### The optimal Scores shows the Dunn Index value of 0.1188182 gives the best method to be kmeans with cluster value of 3.
+
+### While Silhouette method using kmeans also gives k value of 2, which is similar to the silhouette graph shown above for the maximum silhouette coefficient.
+
+
+```{r}
+op <- par(no.readonly=TRUE)
+par(mfrow=c(2,2),mar=c(4,4,3,1))
+plot(internval, legend=FALSE)
+plot(nClusters(internval),measures(internval,"Dunn")[,,1],type="n",axes=F, xlab="",ylab="")
+legend("center", clusterMethods(internval), col=1:9, lty=1:9, pch=paste(1:9))
+par(op)
+```
+### The graph above also shows the validation measure with Dunn index values and Silhouette width for the 3 methods (hierarchical, kmeans, pam) 
+
+
+
+# 6.	Use the clustering results from part 3 (where you ran K-means using k =3) for this question.  Using variable “Type” in the data as “ground truth”, assess the external validity of the K-means  using both the Rand’s index and the Adjusted Rand’s index.  Interpret your results.  
+
+```{r}
+library(EMCluster)
+```
+
+```{r}
+km.res$cluster
+```
+
+```{r}
+df$Type
+```
+
+```{r}
+dfType <- as.numeric(as.character(match(df$Type, LETTERS)))
+```
+
+```{r}
+dfType
+```
+
+```{r}
+library(fossil)
+g1 <- km.res$cluster
+g2 <- dfType
+
+# rand index
+rand.index(g1, g2)
+```
+### The rand Index value of 0.8997038 means to say that the clustering outcomes of kmeans (k=3) match almost identical, since the value is closer to 1
+
+```{r}
+# adjusted Rand Index
+
+adj.rand.index(g1, g2)
+```
+### After rescaling done with adjusted Rand Index, the value of 0.7732937 is not bad enough. This also means that the clustering with kmeans is somehow closer to the clustering from the ground truth of the original Type column in dataset.
+
+
+
+
+# 7.	Each row of the dataset corresponds to a silhouette score.  There are as many silhouette scores as there are rows in the dataset.   Apart from getting the correct answers, marks are given for writing clean and efficient code to answer  the following questions:
+```{r}
+# calculate silhouette scores
+sil <- silhouette(km.res$cluster, dist(scaled_df))
+```
+
+
+
+•	For the entire dataset, how many silhouette scores are negative?  (Use R code to obtain the answer.  For all questions, low/no marks if you provide an answer by manually looking through a list of silhouette scores).
+```{r}
+print(sum(sil < 0))
+```
+### Answer: The code prints zero, which means to say that there is no values in the Silhouette list with negative values.
+
+
+
+•	For the entire dataset, what percentage of the silhouette scores have values that are less than 0.1?
+```{r}
+print(sum(sil < 0.1))
+```
+
+```{r}
+print(round((sum(sil < 0.1) / nrow(sil) *100),3))
+```
+### Answer: Displaying the percentage value of of silhouette score values that are less than 0.1 which is 9.524%
+
+
+
+•	For each of the 3 clusters, identify the rows of the dataset that have silhouette scores less than 0.1.   
+```{r}
+# create dataframe from sil object
+dfsil <- data.frame(sil)
+
+# splitting the dataframe by cluster
+grouped_dfsil <- split(dfsil, dfsil$cluster)
+```
+
+```{r}
+# loop through each cluster
+for (cluster_id in unique(dfsil$cluster)) {
+  cat("Cluster:", cluster_id, "\n")
+  
+  cl_row <- which(dfsil$cluster == cluster_id)
+  less <- cl_row[dfsil$sil_width[cl_row] < 0.1] 
+  
+  for (row_i in less) {
+    row <- dfsil[row_i, ]
+    cat("Row:", row_i, "Silhouette Width:", round(row$sil_width,3), "\n")
+  }
+  
+  cat("\n")
+}
+```
+### Answer: The above display shows the cluster number with the rows that has less than 0.1 silhouette score, also being displayed side by side to confirm its value.
+
+
+
+•	What is the average silhouette score (exact to 3 decimal places) for each cluster?   
+```{r}
+# using the aggregate function to calculate the mean silhouette score per cluster
+avg_sil <- round(aggregate(sil_width ~ cluster, data = dfsil, FUN = mean),3)
+
+# Print Results
+cat("Average silhouette score for each cluster:\n")
+print(avg_sil)
+```
+### Answer: The average silhouette score for each cluster is printed above, where cluster 2 has the highest among the 3 clusters.
+
+
+
+•	What is the average silhouette score (exact to 3 decimal places) for the entire dataset? 
+
+```{r}
+avg_sil_all <- round(mean(dfsil$sil_width),3)
+
+# Print Result
+cat("Average silhouette score for the entire dataset:", avg_sil_all)
+```
+
