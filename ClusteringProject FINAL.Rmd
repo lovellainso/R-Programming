@@ -1,0 +1,668 @@
+# DANA 4840 PROJECT - CLUSTERING ALGORITHM
+
+###   by:   Lovella Inso
+
+
+```{r}
+df <- read.csv("data/winequality-red.csv", sep = ";")
+head(df)
+```
+```{r}
+str(df)
+```
+
+```{r}
+#checking for na values
+print(colSums(is.na(df)))
+```
+
+```{r}
+table(df$quality)
+```
+
+```{r}
+library(dplyr)
+library(caret)
+```
+
+
+```{r}
+library(factoextra)
+library(cluster)
+library(stats)
+library(ggplot2)
+library(tidyverse)
+```
+
+```{r}
+correlation_matrix <- cor(df)  
+heatmap(correlation_matrix)
+```
+```{r}
+correlation_matrix
+```
+Based on the correlation result, we find the variables that are highly correlated with each other, thus could result to better clustering. Below are the variables: 
+
+1. fixed.acidity
+2. volatile.acidity
+3. citric.acid
+4. density
+5. pH
+6. sulphates
+7. alcohol
+
+```{r}
+# based on the model above, we need to create a new dataset with the top 7 columns
+cols <- c("fixed.acidity", "volatile.acidity", "citric.acid", "density", "pH", "sulphates", "alcohol")
+wine_data <- df[, cols]
+```
+
+
+### We need to check first if our dataset is good for clustering through hopkins statistics
+```{r}
+library(hopkins)
+set.seed(123)
+hopkins(wine_data, m=300)
+```
+The Hopkins statistics value of 0.9999146 indicates that the dataset is highly suitable for clustering analysis. It suggests that the data exhibits a strong tendency to form well-defined clusters, making it favorable for applying clustering algorithms. So we can now proceed with clustering our dataset.
+
+### But first:
+```{r}
+#scale the data
+scaled_wine <- scale(wine_data)
+```
+
+```{r}
+# checking data distribution through boxplot
+boxplot(scaled_wine)
+```
+The boxplot above reveals the presence of outliers in the scaled data. Due to the sensitivity of k-means clustering to outliers, it is not recommended to use k-means with this dataset. Instead, we will explore the use of pam clustering, which is more robust and less influenced by outliers. Nevertheless, we should also evaluate the performance of other clustering algorithms on this dataset to gain a comprehensive understanding of their effectiveness.
+
+```{r}
+library(factoextra)
+library(NbClust)
+```
+
+### K-MEANS CLUSTERING ALGORITHM
+#-- we will still see how clustering will perform with Kmeans clustering algorithm
+
+### Finding K
+```{r}
+# Elbow Method
+
+fviz_nbclust(scaled_wine, kmeans, method = "wss") +
+    geom_vline(xintercept = 2, linetype = 2)+
+  labs(subtitle = "Elbow method")
+
+```
+The optimal number of k is not very obvious in the elbow graph shown above, it is either 2 or 3. So we will try silhouette width in finding K. 
+
+```{r}
+# Silhouette Method
+
+fviz_nbclust(scaled_wine, kmeans, method = "silhouette")+
+  labs(subtitle = "Silhouette method")
+```
+The graph above shows an obvious optimal number of clusters which is 2. We will try to find K through Gap Statistics as well. Caution: this will take longer to run.
+
+```{r}
+library(cluster)
+library(factoextra)
+# Gap Statistics
+gap_stat_res <- clusGap(scaled_wine, FUNcluster = kmeans, K.max = 10 , B = 50, verbose = TRUE)
+
+# Visualize the results
+fviz_gap_stat(gap_stat_res) + labs(subtitle = "Gap statistic method")
+```
+The Gap Statistics shows to be 3 as the optimal number of clusters. So we will try to plot our clustering in K means with both clusters 2 and 3 to see which of these give a good clustering result.
+
+```{r}
+# K-means Clustering with k=2
+km.wine<-kmeans(scaled_wine, 2, nstart = 25)
+```
+
+```{r}
+fviz_cluster(km.wine, data=scaled_wine,
+             palette = c("#00AFBB", "#FC4E07"),
+             ellipse.type = "euclid",
+             star.plot = TRUE,
+             repel = TRUE,
+             geom="point",
+             ggtheme = theme_minimal(),
+             main="K-means Clustering with K=2"
+             )
+```
+### Trying out K=3
+```{r}
+# K-means Clustering with k=3
+km.wine3<-kmeans(scaled_wine, 3, nstart = 25)
+```
+
+
+```{r}
+library(factoextra)
+library(cluster)
+
+fviz_cluster(km.wine3, data=scaled_wine,
+             palette = c("#00AFBB", "#FC4E07" ,"purple"),
+             ellipse.type = "euclid",
+             star.plot = TRUE,
+             repel = TRUE,
+             geom="point",
+             ggtheme = theme_minimal(),
+             main="K-means Clustering with K=3"
+             )
+```
+Both clustering diagram (k=2 and k=3) looks good with Kmeans Clustering.
+
+
+### Silhouette Value
+```{r}
+library(cluster)
+
+sile2<-silhouette(km.wine$cluster, dist(scaled_wine))
+
+fviz_silhouette(sile2)
+```
+### Interpretation:
+A higher average silhouette width indicates better-defined clusters with less overlap, and in this case, Cluster 1 has a higher average silhouette width (0.32) compared to Cluster 2 (0.19). This implies that Cluster 1 is more distinct and better separated, indicating a more cohesive and well-defined group of data points.
+
+
+```{r}
+sile3<-silhouette(km.wine3$cluster, dist(scaled_wine))
+
+fviz_silhouette(sile3)
+```
+
+### Interpretation:
+Cluster 1 stands out as the cluster that is better separated and exhibits higher clustering quality compared to the other clusters. This conclusion is supported by the average silhouette width, which is 0.33 for Cluster 1, significantly higher than the average silhouette widths of Cluster 2 (0.19) and Cluster 3 (0.17). A higher average silhouette width indicates that the data points in Cluster 1 are more tightly clustered together and are well-separated from points in other clusters, suggesting a more distinct and cohesive group.
+
+
+# PAM CLUSTERING ALGORITHM
+
+```{r}
+# Elbow Method
+fviz_nbclust(scaled_wine, pam, method = "wss") +
+    geom_vline(xintercept = 2, linetype = 2)+
+  labs(subtitle = "Elbow method")
+```
+For PAM, the elbow method still shows 2, quiet subjective though. We'll try it with Silhouette method.
+
+```{r}
+# Calculate the silhouette widths for different values of k (number of clusters)
+fviz_nbclust(scaled_wine, pam, method = "silhouette") + theme_classic()
+```
+The Silhouette method with PAM is giving us 2 as the optimal number of clusters
+
+```{r}
+# Gap Statistics
+gap_stat <- clusGap(scaled_wine, FUNcluster = pam, K.max = 10, B = 50)
+
+# Plot the gap statistic results
+plot(gap_stat, main = "Gap Statistic for PAM Clustering", xlab = "Number of Clusters (k)")
+```
+Based on the elbow, silhouette, and gap statistics graphs above, the K value is obviously 2, so let's try plotting the clusters with 2 as the value of K
+
+# PAM clustering with Euclidean distance
+```{r}
+# K-means Clustering with k=2
+pam.wine2<-pam(scaled_wine, 2, metric="euclidean")
+```
+
+
+## different view of PAM clustering with K value = 2
+```{r}
+fviz_cluster(pam.wine2, data = scaled_df,
+             palette = "Set2",
+             geom = "point",
+             ellipse.type = "convex", 
+             ggtheme = theme_bw(),
+             title = "Cluster Visualization of the Wine Dataset using PAM with K = 2"
+            )
+```
+### Different visualization of the clustering PAM with K=2
+```{r}
+fviz_cluster(pam.wine2, data=scaled_wine,
+             palette = c("#00AFBB" ,"purple"),
+             ellipse.type = "euclid",
+             star.plot = TRUE,
+             repel = TRUE,
+             geom="point",
+             ggtheme = theme_minimal(),
+             main = "PAM Clustering with K=2"
+             )
+```
+
+
+```{r}
+pam.wine2
+```
+```{r}
+pam.wine2$clusinfo
+```
+```{r}
+sile_pam<-silhouette(pam.wine2$cluster, dist(scaled_wine))
+fviz_silhouette(sile_pam)
+```
+### CONCLUSION:
+
+The analysis using all 3 methods consistently suggests an optimal number of clusters of 2. The clustering graphs above also clearly demonstrate two distinct clusters.
+
+The average silhouette width of approximately 0.27 for both K-means and PAM reinforces the optimal cluster value of 2. While the average silhouette width for K-means with 3 clusters is slightly lower at 0.25, the difference is relatively small. However, for consistency, we will consider the optimal cluster value for this dataset as 2.
+
+By grouping the data based on the values of the "quality" column, we can interpret the clusters as follows: The first cluster comprises data with quality ratings ranging from 0 to 5, representing lower quality or "bad" ratings. The second cluster includes data with quality ratings from 6 to 10, representing higher quality or "excellent" ratings.
+
+Overall, the analysis supports the existence of two distinct groups in the data, which aligns well with the qualitative interpretation of the quality ratings.
+
+
+## We will still try to cluster to 3 using PAM
+```{r}
+# K-means Clustering with k=3
+pam.wine3<-pam(scaled_wine, 3, metric="euclidean")
+```
+
+```{r}
+fviz_cluster(pam.wine3, data = scaled_df,
+             palette = "Set2",
+             geom = "point",
+             ellipse.type = "convex", 
+             ggtheme = theme_bw(),
+             title = "Cluster Visualization of the Seeds Dataset using PAM"
+            )
+```
+
+```{r}
+fviz_cluster(pam.wine3, data=scaled_wine,
+             palette = c("#00AFBB" ,"purple" , "red"),
+             ellipse.type = "euclid",
+             star.plot = TRUE,
+             repel = TRUE,
+             geom="point",
+             ggtheme = theme_minimal(),
+             main = "PAM Clustering with K=3"
+             )
+```
+The clustering with PAM using K=3 still appears to be reasonable. While there are some evident overlaps among clusters, they do not appear to be significantly problematic. The first diagram shows the overlaps more visibly, but overall, the clustering results seem satisfactory.
+
+
+```{r}
+library(fpc)
+```
+
+
+```{r}
+# Get the cluster assignments for each observation
+cluster_assignment2 <- pam.wine2$clustering
+cluster_assignment3 <- pam.wine3$clustering
+
+# Count the number of observations in each cluster
+cluster_count2 <- table(cluster_assignment2)
+cluster_count3 <- table(cluster_assignment3)
+# Print the number of observations in each cluster
+print(cluster_count2)
+print(cluster_count3)
+```
+
+### Internal Validation Metrics:
+```{r}
+library(clValid)
+clmethods <- c("hierarchical","kmeans","pam")
+```
+
+```{r}
+internval <- clValid(scaled_wine, nClust = 2:5, clMethods = clmethods, validation = "internal")
+```
+
+```{r}
+summary(internval)
+optimalScores(internval)
+```
+
+```{r}
+op <- par(no.readonly=TRUE)
+par(mfrow=c(2,2),mar=c(4,4,3,1))
+plot(internval, legend=FALSE)
+plot(nClusters(internval),measures(internval,"Dunn")[,,1],type="n",axes=F, xlab="",ylab="")
+legend("center", clusterMethods(internval), col=1:9, lty=1:9, pch=paste(1:9))
+par(op)
+```
+```{r}
+measures(internval)
+```
+### Connectivity -> Hierarchical -> k=2
+### Dunn         -> PAM          -> k=4
+### Silhouette   -> PAM          -> k=3
+
+Upon analyzing the above results, Through Internal Validation, it is evident that we have achieved favorable clustering outcomes based on the provided data. To visualize these internal validation results, we will proceed by examining the clustering with 3 clusters, as conducted (already done this above) for PAM. Additionally, we will further explore the PAM clustering with 4 clusters. This will enable us to gain valuable insights into the clustering performance for both scenarios.
+
+```{r}
+# PAM with k as 4 
+pam.wine4<-pam(scaled_wine, 4, metric="euclidean")
+```
+
+```{r}
+fviz_cluster(pam.wine4, data=scaled_wine,
+             palette = c("#00AFBB" ,"purple", "red", "green"),
+             ellipse.type = "euclid",
+             star.plot = TRUE,
+             repel = TRUE,
+             geom="point",
+             ggtheme = theme_minimal()
+             )
+```
+```{r}
+fviz_cluster(pam.wine4, data = scaled_df,
+             palette = "Set2",
+             geom = "point",
+             ellipse.type = "convex", 
+             ggtheme = theme_bw(),
+             title = "Cluster Visualization of the Seeds Dataset using PAM"
+            )
+```
+### Interpretation:
+
+The clustering results using PAM with K=4 appear promising, and the clusters show distinct separations. However, it is worth noting that there are some evident overlaps among clusters, more visible in the second diagram.
+
+Next, let's explore hierarchical clustering with K=2 and assess its performance on the data. This will provide a comparison between the two clustering approaches and help us determine the most suitable clustering solution for the dataset.
+
+
+```{r}
+meth <- c( "average", "single", "complete", "ward")
+names(meth) <- c( "average", "single", "complete", "ward")
+acc1 <- function(x) {
+ + agnes(scaled_wine, method = x)$ac}
+map_dbl(meth, acc1)
+```
+### Result Interpretaion:
+
+The following are the cophenetic correlation coefficients for each linkage method:
+
+Average Linkage Method: 0.9462990
+Single Linkage Method: 0.8831598
+Complete Linkage Method: 0.9613354
+Ward Linkage Method: 0.9924393
+
+The Ward linkage method has the highest cophenetic correlation coefficient of 0.9924393, indicating that the hierarchical clustering dendrogram based on the Ward method preserves the original pairwise distances very well. This suggests that the Ward method creates a meaningful and accurate hierarchical clustering structure in our dataset.
+
+So let's use ward in doing hierarchical clustering with K=2.
+
+
+```{r}
+library("ggplot2")
+library("ggdendro")
+library(dendextend)
+```
+```{r}
+# sea of colors for use in dendogram
+colors <- c ("purple", "#FFFF00", "#00FFFF", "#FFC0CB", "#00FF00", "#FFD700")
+```
+
+
+```{r}
+dend <- scaled_wine %>% scale %>% dist %>% 
+   hclust(method = "ward.D2") %>% as.dendrogram %>%
+   set("branches_k_color", k=2) %>% set("branches_lwd", 1.2) %>%
+   set("labels_colors") %>% set("labels_cex", c(.9,1.2)) %>% 
+   set("leaves_pch", 19) %>% set("leaves_col", colors)
+plot(dend)
+```
+The Dendogram shows that the data is well clustered using ward.D2 with having K = 2.
+
+
+### DBScan
+```{r}
+# checking for the value of eps --- the plot below shows 1.7 although this part is somehow subjective
+dbscan::kNNdistplot(scaled_wine, k =  3)
+abline(h = 1.7, lty = 2)
+```
+### Since we have 7 variables is our dataset, we will use 7x2=14 MinPts
+```{r}
+library("dbscan")
+library("fpc")
+set.seed(123)
+# fpc package
+res.fpc <- fpc::dbscan(scaled_wine, eps = 1.7, MinPts = 14)
+# dbscan package
+res.db <- dbscan::dbscan(scaled_wine, 1.7, 14)
+```
+
+
+```{r}
+# Check if the cluster assignments are the same for all data points
+clusters_match <- all(res.fpc$cluster %in% res.db$cluster)
+# Print the result
+print(clusters_match)
+```
+```{r}
+fviz_cluster(res.fpc, scaled_wine, stand=FALSE, ellipse=FALSE, show.clust.cent = FALSE, geom = "point" ,palette='jco', ggthem=theme_classic(), main="DBSCAN Clustering using FPC Package")
+```
+
+```{r}
+fviz_cluster(res.db, scaled_wine, geom = "point" ,main="DBSCAN Clustering using DBSCAN Package")
+```
+```{r}
+table(res.fpc$cluster)
+table(res.db$cluster)
+```
+
+### Result Interpretation:
+The fact that every data point assigned to a cluster in the res.fpc clustering result is also assigned to the same cluster in the res.db clustering result is indicated by the TRUE result. This indicates a high level of agreement between the two methods, suggesting a consistent and robust clustering solution.
+
+Both the fpc and dbscan packages have produced identical results, both indicating the presence of 2 clusters, with a larger proportion of data points belonging to cluster 1.
+
+
+### Overall Conclusion:
+After performing various clustering algorithms on the dataset, we consistently find that the best number of clusters is 2. K-means, PAM, hierarchical clustering, and even DBSCAN suggest that the data can be effectively grouped into two distinct clusters based on their similarities.
+
+This consensus from multiple clustering methods indicates that the dataset exhibits a clear partitioning into two well-defined groups. Each algorithm independently identified this optimal number of clusters, reinforcing the robustness of the findings.
+
+These clusters could represent different type of wines or different quality levels within the dataset. The variables fixed.acidity, volatile.acidity, citric.acid, density, pH, sulphates, and alcohol might be the key factors contributing to the differentiation between these two clusters.
+
+For instance, one cluster might be characterized by wines with higher fixed acidity, lower volatile acidity, higher citric acid content, higher density, lower pH values, lower sulphate levels, and lower alcohol content. This could represent a specific type or quality level of wines.
+
+On the other hand, the second cluster might be associated with wines having lower fixed acidity, higher volatile acidity, lower citric acid content, lower density, higher pH values, higher sulphate levels, and higher alcohol content. This could represent another distinct type or quality level of wines.
+
+In summary, the clustering analysis with k=2 has allowed us to group the wines in your dataset into two distinct clusters based on their sensory attributes, as evaluated by wine experts. These clusters likely represent different qualities or characteristics of wines, providing valuable information for making informed decisions in the context of wine production, assessment, and marketing.
+
+
+
+
+####---------------------------------------------------- ####
+
+# Second DATASET : Mall_Customers
+```{r}
+#df2 <- read.csv("data/Mall_Customers.csv")
+df2 <- Mall_Customers
+head(df2)
+```
+
+```{r}
+str(df2)
+```
+
+```{r}
+#checking for na values
+print(colSums(is.na(df2)))
+```
+```{r}
+cols2 <- c("Age", "Annual.Income..k..", "Spending.Score..1.100.")
+mall_data <- df2[, cols2]
+```
+
+```{r}
+library(hopkins)
+set.seed(123)
+hopkins(mall_data, m=50)
+```
+With this Hopkins statistic value of 0.946803 means that there is a reasonable tendency for the data points to be clustered together, which is a positive sign for conducting clustering analysis on the dataset. 
+So let's proceed with clustering our dataset using hierarchical clustering.
+
+
+```{r}
+corr_mat <- cor(mall_data)  
+corr_mat
+```
+
+```{r}
+heatmap(corr_mat)
+```
+The correlation values are low, suggesting that there is no strong linear relationship between any of the three variables
+
+
+###We need to scale our data first as they did not appear to be of the same range.
+
+```{r}
+mall_datas <- scale(mall_data)
+```
+
+```{r}
+# checking data distribution through boxplot after scaling
+boxplot(mall_datas)
+```
+Now that our data is properly scaled and well-distributed as shown in the boxplot above, we can proceed with clustering.
+
+
+### Hierarchical Clustering Analysis
+```{r}
+# Checking which of these 4 methods will give the biggest value
+library(purrr)
+library(cluster)
+
+meth <- c( "average", "single", "complete", "ward")
+names(meth) <- c( "average", "single", "complete", "ward")
+acc <- function(x) {
+ + agnes(mall_datas, method = x)$ac}
+map_dbl(meth, acc)
+```
+
+The linkage matrix contains similarity measures for different linkage methods used in hierarchical clustering. The highest value, 0.9836557, corresponds to the "Ward" linkage method. Thus, the most appropriate method for hierarchical clustering in this case is "Ward.D2"
+
+
+### Now let us find the optimal value of K using ward method
+```{r}
+library(NbClust)
+NbClust(mall_datas, method = 'ward.D2', index = 'all')$Best.nc
+```
+
+From conclusion above: According to the majority rule, the best number of clusters is  6.
+
+
+### So let us plot our dendrogram with cluster value 6
+```{r}
+rownames(df2) <- df2$CustomerID
+d.mall <- dist(mall_datas, method = "euclidean")
+
+mall.hc <- hclust(d.mall, method = "ward.D2")
+
+#grp <- cutree(mall.hc, k = 6)
+```
+
+```{r}
+library(dendextend)
+
+# Create the dendrogram
+dend <- mall_datas %>%
+  scale() %>%
+  dist() %>%
+  hclust(method = "ward.D2") %>%
+  as.dendrogram()
+
+dend <- set(dend, "branches_k_color", k = 6)
+dend <- set(dend, "branches_lwd", 1.2)
+
+# Set the colors of the labels using the 'colors' vector
+colors <- c("red", "blue", "green", "orange", "purple", "yellow")
+
+dend <- set(dend, "labels_colors", colors)
+dend <- set(dend, "labels_cex", c(0.9, 1.2))
+dend <- set(dend, "leaves_pch", 19)
+dend <- set(dend, "leaves_col", colors)
+
+plot(dend)
+
+```
+
+
+```{r}
+library(dendextend)
+dend <- mall_datas %>% scale %>% dist %>% 
+   hclust(method = "ward.D2") %>% as.dendrogram %>%
+   set("branches_k_color", k=6) %>% set("branches_lwd", 1.2) %>%
+   set("labels_colors") %>% set("labels_cex", c(.9,1.2)) %>% 
+   set("leaves_pch", 19) %>% set("leaves_col", colors)
+plot(dend)
+```
+
+The dendrogram resulting from hierarchical clustering with 6 clusters is displayed above. Each cluster is clearly distinguished by its respective color, indicating well-defined groupings of data points. This suggests that the dataset exhibits distinct patterns or subgroups that can be effectively represented by 6 clusters. 
+
+
+### Let's try "complete" method since it is next to the highest value after ward
+```{r}
+NbClust(mall_datas, method = 'complete', index = 'all')$Best.nc
+```
+
+### From the above result, the best number of cluster is 4 for complete method,
+
+```{r}
+dend <- mall_datas %>% scale %>% dist %>% 
+   hclust(method = "complete") %>% as.dendrogram %>%
+   set("branches_k_color", k=4) %>% set("branches_lwd", 1.2) %>%
+   set("labels_colors") %>% set("labels_cex", c(.9,1.2)) %>% 
+   set("leaves_pch", 19) %>% set("leaves_col", colors)
+plot(dend)
+```
+The dendrogram presented above depicts the hierarchical clustering with 4 clusters, utilizing the complete linkage method. The distinct clusters are readily observable, confirming that Nbclust accurately provided a favorable clustering outcome for this dataset. The complete linkage method tends to form compact, well-separated clusters, which is evident in the clear separation of data points within each cluster. This suggests that the dataset exhibits meaningful and well-defined subgroups, making hierarchical clustering an effective technique for capturing the underlying patterns and structures in the data.
+
+
+### Let's try "average" method too
+```{r}
+NbClust(mall_datas, method = 'average', index = 'all')$Best.nc
+```
+
+
+### For "average" linkage, number of cluster is 2 so let's try to plot our dendogram
+```{r}
+dend <- mall_datas %>% scale %>% dist %>% 
+   hclust(method = "average") %>% as.dendrogram %>%
+   set("branches_k_color", k=2) %>% set("branches_lwd", 1.2) %>%
+   set("labels_colors") %>% set("labels_cex", c(.9,1.2)) %>% 
+   set("leaves_pch", 19) %>% set("leaves_col", colors)
+plot(dend)
+```
+### Lastly, the "single" method
+```{r}
+NbClust(mall_datas, method = 'single', index = 'all')$Best.nc
+```
+### best number of clusters for single linkage is 9, so let's plot our dendogram
+```{r}
+dend <- mall_datas %>% scale %>% dist %>% 
+   hclust(method = "single") %>% as.dendrogram %>%
+   set("branches_k_color", k=9) %>% set("branches_lwd", 1.2) %>%
+   set("labels_colors") %>% set("labels_cex", c(.9,1.2)) %>% 
+   set("leaves_pch", 19) %>% set("leaves_col", colors)
+plot(dend)
+```
+### Linkage Result Interpretation:
+
+The single linkage is forming many small, fragmented clusters due to its sensitivity to noise and outliers. With 9 as the number of clusters is not very interpretable and might not represent meaningful patterns in the data.
+
+For average linkage with only 2 clusters, it is likely to have merged most of the data points into two larger clusters.
+The low number of clusters may not capture the underlying structure of the data effectively. It's possible that average linkage is not able to identify more subtle patterns and variations in the data.
+
+Complete Linkage having 4 clusters has found some intermediate level of granularity in the data. The diagram also shows a well-separated and appropriately clustered data. It is possible that complete linkage is capturing the main patterns and groupings in the data more effectively.
+
+With 6 clusters, Ward linkage is likely identifying a relatively fine-grained clustering structure.
+The higher number of clusters suggests that Ward is able to detect more subtle differences in the data.
+It could be that Ward linkage is providing a more detailed and nuanced representation of the data. Ward linkage might be a good choice if we are interested in exploring fine distinctions in customer behavior and preferences
+
+### Overall Interpretation:
+
+So given the dataset Mall Customers, ward linkage can group customers with similar age and income levels but varying spending patterns into separate clusters. This level of granularity allows us to identify subtle differences in customer behavior that might not be apparent with other linkage methods.
+
+Also, Ward linkage can potentially create clusters with customers who have similar age and income but significantly different spending scores. This enables us to identify specific customer segments, such as "high-income, high-spending" or "low-income, high-spending" groups, which can be crucial for targeted marketing strategies.
+
+Fine-grained clustering through Ward linkage can also help identify customer segments that are at risk of churn or those with high loyalty. This information can guide businesses in designing targeted retention programs to keep high-value customers and improve customer satisfaction.
+
+In conclusion, Ward linkage can be a powerful tool for exploring fine distinctions in customer behavior and preferences. It allows businesses to uncover valuable insights about their customers, tailor marketing efforts, optimize product offerings, and ultimately enhance customer satisfaction and loyalty.
+
+
